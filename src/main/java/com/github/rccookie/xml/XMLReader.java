@@ -23,6 +23,8 @@ class XMLReader implements AutoCloseable {
     final boolean includeComments;
     final boolean trimWhitespaces;
     final boolean includeProcessors;
+    final boolean allowEmptyAttr;
+    final boolean html;
 
 
     /**
@@ -35,6 +37,8 @@ class XMLReader implements AutoCloseable {
         includeComments = (options & XMLParser.INCLUDE_COMMENTS) != 0;
         trimWhitespaces = (options & XMLParser.PRESERVE_WHITESPACES) == 0;
         includeProcessors = (options & XMLParser.INCLUDE_PROCESSORS) != 0;
+        allowEmptyAttr = (options & XMLParser.ALLOW_EMPTY_ATTR) != 0;
+        this.html = (options & XMLParser.HTML) != 0;
     }
 
 

@@ -24,7 +24,7 @@ public class Comment extends Node {
     }
 
     @Override
-    void toString(StringBuilder str) {
+    void toString(StringBuilder str, boolean inner) {
         str.append("<!--").append(comment).append("-->");
     }
 
@@ -34,7 +34,7 @@ public class Comment extends Node {
     }
 
     @Override
-    void innerXML(StringBuilder str) {
+    void innerXML(StringBuilder str, boolean inner) {
         // Comment has no inner value
     }
 

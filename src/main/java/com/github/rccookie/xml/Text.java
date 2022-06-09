@@ -23,7 +23,7 @@ public class Text extends Node {
     }
 
     @Override
-    void toString(StringBuilder str) {
+    void toString(StringBuilder str, boolean inner) {
         for(int i=0, stop=text.length(); i<stop; i++) {
             char c = text.charAt(i);
             if(c == '<') str.append("&lt;");
@@ -43,8 +43,8 @@ public class Text extends Node {
     }
 
     @Override
-    void innerXML(StringBuilder str) {
-        toString(str);
+    void innerXML(StringBuilder str, boolean inner) {
+        toString(str, inner);
     }
 
     @Override

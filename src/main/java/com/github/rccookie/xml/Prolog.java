@@ -12,14 +12,14 @@ public class Prolog extends Node {
 
 
     @Override
-    void toString(StringBuilder str) {
+    void toString(StringBuilder str, boolean inner) {
         str.append("<?").append(tag);
         attributes.forEach((k,v) -> str.append(' ').append(k).append('=').append('"').append(v.replace("\"", "&quot;")).append('"'));
         str.append("?>");
     }
 
     @Override
-    void innerXML(StringBuilder str) {
+    void innerXML(StringBuilder str, boolean inner) {
         // No inner value
     }
 

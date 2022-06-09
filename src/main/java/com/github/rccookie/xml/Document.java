@@ -28,12 +28,12 @@ public class Document extends Node {
     }
 
     @Override
-    void toString(StringBuilder str) {
+    void toString(StringBuilder str, boolean inner) {
         if(xmlDeclaration != null)
-            xmlDeclaration.toString(str);
+            xmlDeclaration.toString(str, inner);
         if(doctype != null)
-            doctype.toString(str);
-        innerXML(str);
+            doctype.toString(str, inner);
+        innerXML(str, inner);
     }
 
     @Override

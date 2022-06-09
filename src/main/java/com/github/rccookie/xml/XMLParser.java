@@ -8,6 +8,9 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
     public static final long INCLUDE_COMMENTS = 1;
     public static final long PRESERVE_WHITESPACES = 1 << 1;
     public static final long INCLUDE_PROCESSORS = 1 << 2;
+    public static final long ALLOW_EMPTY_ATTR = 1 << 3;
+
+    public static final long HTML = 1 << 4 | ALLOW_EMPTY_ATTR;
 
     private final XMLReader xml;
     private boolean closed = false;
@@ -59,7 +62,7 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
 
     private Node parseNextNode() {
         if(!xml.startsWith('<')) {
-            System.out.println("Start: " + xml.peekDescription());
+//            System.out.println("Start: " + xml.peekDescription());
             Text text = parseNextText();
             if(text != null) return text;
             return parseNextNode();
@@ -80,11 +83,15 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
             return node;
         }
         xml.skipExpected('>');
+        if(xml.html && tag.equals("input")) return node;
+
         while(!xml.skipToContent().startsWith("</"))
             node.children.add(parseNextNode());
-        if(!xml.skip(2).startsWith(tag))
+
+        if(xml.startsWith("</" + tag + '>'))
+            xml.skip(tag.length() + 3);
+        else if(!xml.html)
             throw new XMLParseException("Incorrect closing tag, expected '"+tag+"'", xml);
-        xml.skip(tag.length()).skipExpected('>');
 
         doctypeAllowed = false;
 
@@ -103,15 +110,15 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
             str.deleteCharAt(str.length()-1);
 
         String text = formatText(str.toString());
-        System.out.println("Str:  '" + str + "'");
-        System.out.println("Text: '" + text + "'");
+//        System.out.println("Str:  '" + str + "'");
+//        System.out.println("Text: '" + text + "'");
         if(text.isEmpty()) return null;
         doctypeAllowed = false;
         return new Text(text);
     }
 
     private String formatText(String str) {
-        System.out.println("Length: " + str.length());
+//        System.out.println("Length: " + str.length());
         if("\n".equals(str) || "\r".equals(str) || "\r\n".equals(str)) return "";
         return (xml.trimWhitespaces ? str.replaceAll("\\s+", " ") : str)
                 .replace("&lt;", "<")
@@ -202,7 +209,7 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
         for(char c = xml.peek(); c!='>' && c!='=' && c!='?' && c!='/' && !Character.isWhitespace(c); c = xml.skip().peek())
             key.append(c);
         if(key.toString().isEmpty())
-            throw new XMLParseException("<"+type+">", xml.peekDescription(), xml);
+            throw new XMLParseException("["+type+"]", xml.peekDescription(), xml);
         return key.toString();
     }
 
@@ -222,13 +229,19 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
             if(c == '?' || c == '>' || c == '/') return;
 
             String key = parseNextKey("attribute key");
-            xml.skipWhitespaces(true).skipExpected('=').skipWhitespaces(true);
-            node.attributes.put(key, parseNextString());
+            xml.skipWhitespaces(true);
+            if(xml.allowEmptyAttr && !xml.startsWith('='))
+                node.attributes.put(key, "");
+            else {
+                xml.skipExpected('=').skipWhitespaces(true);
+                node.attributes.put(key, parseNextString());
+            }
         }
     }
 
 
 //    public static void main(String[] args) throws Exception {
-//        System.out.println(new XMLParser(new FileReader("C:\\Users\\Leon\\AppData\\Roaming\\JetBrains\\IntelliJIdea2021.3\\scratches\\scratch_1.xml"), INCLUDE_COMMENTS).parseAll());
+//        for(Node n : new XMLParser(new InputStreamReader(new URL("https://www.google.com").openStream()), HTML))
+//            System.out.println(n);
 //    }
 }

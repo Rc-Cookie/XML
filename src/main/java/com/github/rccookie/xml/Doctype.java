@@ -57,7 +57,7 @@ public class Doctype extends Node {
     }
 
     @Override
-    void toString(StringBuilder str) {
+    void toString(StringBuilder str, boolean inner) {
         str.append("<!DOCTYPE ").append(rootElement);
         if(locationType != null) {
             str.append(' ').append(locationType);

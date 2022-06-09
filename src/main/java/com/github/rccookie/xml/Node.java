@@ -28,16 +28,25 @@ public class Node implements Iterable<Node> {
     @Override
     public String toString() {
         StringBuilder str = new StringBuilder();
-        toString(str);
+        toString(str, true);
         return str.toString();
     }
 
-    void toString(StringBuilder str) {
+    void toString(StringBuilder str, boolean inner) {
         str.append('<').append(tag);
         attributes.forEach((k,v) -> str.append(' ').append(k).append("=\"").append(v.replace("\"", "&quot;")).append('"'));
         str.append('>');
-        innerXML(str);
+        if(inner)
+            innerXML(str, true);
+        else if(!children.isEmpty())
+            str.append("...");
         str.append("</").append(tag).append('>');
+    }
+
+    public String toInfoString() {
+        StringBuilder str = new StringBuilder();
+        toString(str, false);
+        return str.toString();
     }
 
     public Node getParent() {
@@ -71,12 +80,12 @@ public class Node implements Iterable<Node> {
 
     public String innerXML() {
         StringBuilder str = new StringBuilder();
-        innerXML(str);
+        innerXML(str, true);
         return str.toString();
     }
 
-    void innerXML(StringBuilder str) {
-        for(Node n : children) n.toString(str);
+    void innerXML(StringBuilder str, boolean inner) {
+        for(Node n : children) n.toString(str, inner);
     }
 
     public void setInnerXML(String xml) {
@@ -92,6 +101,10 @@ public class Node implements Iterable<Node> {
 
     void getText(StringBuilder str) {
         for(Node c : children) c.getText(str);
+    }
+
+    public Node children(int index) {
+        return children.get(index);
     }
 
     @Override
