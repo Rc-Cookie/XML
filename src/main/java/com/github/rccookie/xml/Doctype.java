@@ -1,7 +1,8 @@
 package com.github.rccookie.xml;
 
 import java.util.Collections;
-import java.util.Objects;
+
+import com.github.rccookie.util.Arguments;
 
 public class Doctype extends Node {
 
@@ -12,8 +13,8 @@ public class Doctype extends Node {
     private String structure = null;
 
     public Doctype(String rootElement) {
-        super("!DOCTYPE", Collections.emptyMap(), Collections.emptyList());
-        this.rootElement = Objects.requireNonNull(rootElement);
+        super("!DOCTYPE", AttributeMap.EMPTY, Collections.emptyList());
+        this.rootElement = Arguments.checkNull(rootElement);
     }
 
     public String getRootElement() {
@@ -37,7 +38,7 @@ public class Doctype extends Node {
     }
 
     public void setRootElement(String rootElement) {
-        this.rootElement = Objects.requireNonNull(rootElement);
+        this.rootElement = Arguments.checkNull(rootElement);
     }
 
     public void setLocationType(LocationType locationType) {
@@ -57,7 +58,7 @@ public class Doctype extends Node {
     }
 
     @Override
-    void toString(StringBuilder str, boolean inner) {
+    void toString(StringBuilder str, int indent, boolean html, boolean inner) {
         str.append("<!DOCTYPE ").append(rootElement);
         if(locationType != null) {
             str.append(' ').append(locationType);

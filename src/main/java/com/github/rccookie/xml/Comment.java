@@ -1,15 +1,16 @@
 package com.github.rccookie.xml;
 
 import java.util.Collections;
-import java.util.Objects;
+
+import com.github.rccookie.util.Arguments;
 
 public class Comment extends Node {
 
     private String comment;
 
     public Comment(String comment) {
-        super(null, Collections.emptyMap(), Collections.emptyList());
-        this.comment = Objects.requireNonNull(comment);
+        super(null, AttributeMap.EMPTY, Collections.emptyList());
+        this.comment = Arguments.checkNull(comment);
     }
 
 
@@ -20,11 +21,11 @@ public class Comment extends Node {
     public void setComment(String comment) {
         if(comment.contains("--"))
             throw new XMLParseException("'--' is not allowed in XML comments");
-        this.comment = Objects.requireNonNull(comment);
+        this.comment = Arguments.checkNull(comment);
     }
 
     @Override
-    void toString(StringBuilder str, boolean inner) {
+    void toString(StringBuilder str, int indent, boolean html, boolean inner) {
         str.append("<!--").append(comment).append("-->");
     }
 
@@ -34,7 +35,7 @@ public class Comment extends Node {
     }
 
     @Override
-    void innerXML(StringBuilder str, boolean inner) {
+    void innerXML(StringBuilder str, int indent, boolean html, boolean inner) {
         // Comment has no inner value
     }
 

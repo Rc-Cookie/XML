@@ -1,25 +1,44 @@
 package com.github.rccookie.xml;
 
 import java.io.Reader;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Iterator;
+import java.util.Set;
+import java.util.function.Consumer;
+
+import com.github.rccookie.util.Arguments;
 
 public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable {
 
-    public static final long INCLUDE_COMMENTS = 1;
-    public static final long PRESERVE_WHITESPACES = 1 << 1;
-    public static final long INCLUDE_PROCESSORS = 1 << 2;
-    public static final long ALLOW_EMPTY_ATTR = 1 << 3;
-
-    public static final long HTML = 1 << 4 | ALLOW_EMPTY_ATTR;
+    static final Set<String> HTML_VOID_TAGS = Set.of("area", "base", "br", "col", "hr", "img", "input", "link", "meta", "param", "command", "keygen", "source");
+    static final Set<String> HTML_POSSIBLY_UNCLOSED_TAGS = Set.of("html", "head", "body", "p", "li", "dt", "dd", "option", "thead", "th", "tbody", "tr", "td", "tfoot", "colgroup");
+    static final Set<String> HTML_TAGS = Set.of("a", "abbr", "acronym", "address", "applet", "area", "article", "aside", "audio", "b", "base", "basefont", "bb", "bdo", "big",
+            "blockquote", "body", "br", "button", "canvas", "caption", "center", "circle", "cite", "code", "col", "colgroup", "command", "datagrid", "datalist", "dd", "del",
+            "details", "dfn", "dialog", "dir", "div", "dl", "dt", "em", "embed", "eventsource", "fieldset", "figcaption", "figure", "font", "footer", "form", "frame", "frameset",
+            "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hgroup", "hr", "html", "i", "iframe", "img", "input", "ins", "isindex", "kbd", "keygen", "label", "legend", "li",
+            "link", "main", "map", "mark", "menu", "meta", "meter", "nav", "noframes", "noscript", "object", "ol", "optgroup", "option", "output", "p", "param", "path", "pre",
+            "progress", "q", "rp", "rt", "ruby", "s", "samp", "script", "section", "select", "small", "source", "span", "strike", "strong", "style", "sub", "summary", "sup", "svg",
+            "table", "tbody", "td", "template", "textarea", "tfoot", "th", "thead", "time", "title", "tr", "track", "tt", "u", "ul", "var", "video", "wbr");
 
     private final XMLReader xml;
     private boolean closed = false;
     private boolean firstNode = true;
     private boolean doctypeAllowed = true;
 
+    private final Deque<String> hierarchy = new ArrayDeque<>();
+
+    private Consumer<String> warningListener = w -> {};
+
 
     XMLParser(Reader reader, long options) {
         xml = new XMLReader(reader, options);
+    }
+
+    public XMLParser setWarningListener(Consumer<String> warningListener) {
+        this.warningListener = Arguments.checkNull(warningListener);
+
+        return this;
     }
 
     @Override
@@ -37,6 +56,7 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
         if(closed) throw new IllegalStateException("Parser has been closed");
         if(!firstNode) throw new IllegalStateException("Can only parse document as the first parse action");
         Document document = new Document();
+        hierarchy.clear();
         while(hasNext()) {
             Node next = parseNextNode();
             if(next instanceof XMLDeclaration)
@@ -57,6 +77,7 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
     public Node next() {
         if(closed) throw new IllegalStateException("Parser has been closed");
         if(!hasNext()) throw new XMLParseException("No value present", xml);
+        hierarchy.clear();
         return parseNextNode();
     }
 
@@ -70,32 +91,74 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
 
         if(xml.skip().skipIf('!')) {
             if(xml.startsWith("--")) return parseNextComment();
-            else if(xml.startsWith("DOCTYPE")) return parseNextDoctype();
+            else if(xml.startsWithIgnoreCase("DOCTYPE")) return parseNextDoctype();
             else throw new XMLParseException(doctypeAllowed ? "--' or 'DOCTYPE" : "--", xml.peekDescription(), xml);
         }
         if(xml.startsWith('?')) return parseNextProlog();
+        if(xml.tryFixErrors && xml.skipIf('/')) {
+            Node node = new Node(parseNextKey("tag"));
+            parseNextAttributes(node);
+            warn("Closing tag '"+node.tag+"' never opened");
+            xml.skipExpected('>');
+            return node;
+        }
 
         String tag = parseNextKey("tag");
         Node node = new Node(tag);
+        if(xml.html && !HTML_TAGS.contains(tag))
+            warn("Unknown html tag '"+tag+"'");
+
         parseNextAttributes(node);
         if(xml.skipIf('/')) {
             xml.skipExpected('>');
             return node;
         }
         xml.skipExpected('>');
-        if(xml.html && tag.equals("input")) return node;
+        if(xml.html) {
+            if(HTML_VOID_TAGS.contains(tag)) {
+                xml.skipIf("</"+tag+'>');
+                return node;
+            }
+            if(tag.equals("script")) {
+                Text code = parseScriptContent();
+                if(code != null)
+                    node.children.add(code);
+                return node;
+            }
+        }
 
-        while(!xml.skipToContent().startsWith("</"))
-            node.children.add(parseNextNode());
+        hierarchy.push(tag);
+        while(!xml.skipToContent().isEmpty()) {
+            if(!xml.startsWith("</"))
+                node.children.add(parseNextNode());
+            else if(xml.tryFixErrors && !xml.startsWith("</"+tag+'>')) {
+                String nextTag = xml.peekClosingTag();
+                if(hierarchy.contains(nextTag) && HTML_POSSIBLY_UNCLOSED_TAGS.contains(tag)) break; // There are probably closing tags missing
+                else node.children.add(parseNextNode()); // There are probably too many closing tags
+            }
+            else break;
+        }
+        hierarchy.pop();
 
         if(xml.startsWith("</" + tag + '>'))
             xml.skip(tag.length() + 3);
-        else if(!xml.html)
-            throw new XMLParseException("Incorrect closing tag, expected '"+tag+"'", xml);
+        else if(xml.tryFixErrors) warn("Unclosed tag '"+tag+"'");
+        else throw new XMLParseException("Incorrect closing tag, expected '"+tag+"'", xml);
+
 
         doctypeAllowed = false;
 
         return node;
+    }
+
+    private Text parseScriptContent() {
+        StringBuilder str = new StringBuilder();
+        while(!xml.startsWith("</script>"))
+            str.append(xml.read());
+        xml.skip(9);
+        doctypeAllowed = false;
+        String code = xml.trimWhitespaces ? str.toString().strip() : str.toString();
+        return code.isEmpty() ? null : new Text(code);
     }
 
     private Text parseNextText() {
@@ -106,12 +169,11 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
             str = new StringBuilder();
             while(!xml.isEmpty()) str.append(xml.read());
         }
-        while(xml.trimWhitespaces && Character.isWhitespace(str.charAt(str.length()-1)))
+        while(xml.trimWhitespaces && str.length() != 0 && Character.isWhitespace(str.charAt(str.length()-1)))
             str.deleteCharAt(str.length()-1);
 
         String text = formatText(str.toString());
-//        System.out.println("Str:  '" + str + "'");
-//        System.out.println("Text: '" + text + "'");
+
         if(text.isEmpty()) return null;
         doctypeAllowed = false;
         return new Text(text);
@@ -120,10 +182,7 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
     private String formatText(String str) {
 //        System.out.println("Length: " + str.length());
         if("\n".equals(str) || "\r".equals(str) || "\r\n".equals(str)) return "";
-        return (xml.trimWhitespaces ? str.replaceAll("\\s+", " ") : str)
-                .replace("&lt;", "<")
-                .replace("&gt;", ">")
-                .replace("&amp;", "&");
+        return XMLEncoder.decode(xml.trimWhitespaces ? str.replaceAll("\\s+", " ") : str);
     }
 
     private Comment parseNextComment() {
@@ -214,12 +273,24 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
     }
 
     private String parseNextString() {
-        xml.skipExpected('"');
-        int end = xml.indexOf('"');
+        char start = xml.peek();
+        if(start != '"' && start != '\'') {
+            if(xml.tryFixErrors) return parseNextLooseString();
+            else throw new XMLParseException("\"' or ''", start, xml);
+        }
+        xml.skip();
+        int end = xml.indexOf(start);
         if(end == -1) throw new XMLParseException("Unclosed string literal", xml);
         String str = xml.read(end);
         xml.skip();
-        return str;
+        return XMLEncoder.decode(str);
+    }
+
+    private String parseNextLooseString() {
+        StringBuilder key = new StringBuilder();
+        for(char c = xml.peek(); c!='>' && !Character.isWhitespace(c); c = xml.skip().peek())
+            key.append(c);
+        return XMLEncoder.decode(key.toString());
     }
 
     private void parseNextAttributes(Node node) {
@@ -229,19 +300,17 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
             if(c == '?' || c == '>' || c == '/') return;
 
             String key = parseNextKey("attribute key");
-            xml.skipWhitespaces(true);
-            if(xml.allowEmptyAttr && !xml.startsWith('='))
+            c = xml.peekNextNonWhitespace();
+            if(xml.allowEmptyAttr && c != '=')
                 node.attributes.put(key, "");
             else {
-                xml.skipExpected('=').skipWhitespaces(true);
+                xml.skipWhitespaces(true).skipExpected('=').skipWhitespaces(true);
                 node.attributes.put(key, parseNextString());
             }
         }
     }
 
-
-//    public static void main(String[] args) throws Exception {
-//        for(Node n : new XMLParser(new InputStreamReader(new URL("https://www.google.com").openStream()), HTML))
-//            System.out.println(n);
-//    }
+    private void warn(String msg) {
+        warningListener.accept(msg + " (at " + xml.getPosition() + ')');
+    }
 }

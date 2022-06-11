@@ -24,6 +24,7 @@ class XMLReader implements AutoCloseable {
     final boolean trimWhitespaces;
     final boolean includeProcessors;
     final boolean allowEmptyAttr;
+    final boolean tryFixErrors;
     final boolean html;
 
 
@@ -34,11 +35,12 @@ class XMLReader implements AutoCloseable {
      */
     XMLReader(Reader reader, long options) {
         this.reader = reader.markSupported() ? reader : new BufferedReader(reader);
-        includeComments = (options & XMLParser.INCLUDE_COMMENTS) != 0;
-        trimWhitespaces = (options & XMLParser.PRESERVE_WHITESPACES) == 0;
-        includeProcessors = (options & XMLParser.INCLUDE_PROCESSORS) != 0;
-        allowEmptyAttr = (options & XMLParser.ALLOW_EMPTY_ATTR) != 0;
-        this.html = (options & XMLParser.HTML) != 0;
+        includeComments = (options & XML.INCLUDE_COMMENTS) != 0;
+        trimWhitespaces = (options & XML.PRESERVE_WHITESPACES) == 0;
+        includeProcessors = (options & XML.INCLUDE_PROCESSORS) != 0;
+        allowEmptyAttr = (options & XML.ALLOW_EMPTY_ATTR) != 0;
+        tryFixErrors = (options & XML.TRY_FIX_ERRORS) != 0;
+        html = (options & XML.HTML) != 0;
     }
 
 
@@ -63,7 +65,6 @@ class XMLReader implements AutoCloseable {
         try {
             for(int i=0;;i++) {
                 reader.mark(i+1);
-                //noinspection ResultOfMethodCallIgnored
                 reader.skip(i);
                 int d = reader.read();
                 reader.reset();
@@ -87,7 +88,6 @@ class XMLReader implements AutoCloseable {
         try {
             iLoop: for(int i=0;;i++) {
                 reader.mark(i+1);
-                //noinspection ResultOfMethodCallIgnored
                 reader.skip(i);
                 int d = reader.read();
                 if(d == string.charAt(0)) {
@@ -112,7 +112,7 @@ class XMLReader implements AutoCloseable {
 
     @Override
     public String toString() {
-        return "XMLReader{" + reader + "}";
+        return "XMLReader{" + reader + "} at " + getPosition();
     }
 
     /**
@@ -144,7 +144,7 @@ class XMLReader implements AutoCloseable {
 
     /**
      * Skips all whitespaces at the start of the reader as specified in
-     * {@link Character#isWhitespace(char)}. If the {@link XMLParser#PRESERVE_WHITESPACES}
+     * {@link Character#isWhitespace(char)}. If the {@link XML#PRESERVE_WHITESPACES}
      * option is enabled this does nothing.
      *
      * @return This xml reader
@@ -170,6 +170,30 @@ class XMLReader implements AutoCloseable {
         if(!Character.isWhitespace(c))
             throw new XMLParseException("<whitespace>", c, this);
         return this;
+    }
+
+    char peekNextNonWhitespace() {
+        try {
+            int c = peek();
+            int i = 2;
+            while(Character.isWhitespace(c)) {
+                reader.mark(i);
+                reader.skip(i / 2);
+                for (int j = i / 2; j < i; j++) {
+                    c = reader.read();
+                    if(c == -1) {
+                        reader.reset();
+                        throw new XMLParseException("Reached end of file during parsing", this);
+                    }
+                    if(!Character.isWhitespace(c)) break;
+                }
+                reader.reset();
+                i *= 2;
+            }
+            return (char) c;
+        } catch(IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /**
@@ -270,7 +294,7 @@ class XMLReader implements AutoCloseable {
     }
 
     /**
-     * Skips whitespaces, comments and newlines. If the {@link XMLParser#INCLUDE_COMMENTS}
+     * Skips whitespaces, comments and newlines. If the {@link XML#INCLUDE_COMMENTS}
      * option is set this will behave equivalently to {@link #skipWhitespaces(boolean)} called
      * with {@code false}.
      *
@@ -331,6 +355,32 @@ class XMLReader implements AutoCloseable {
         }
     }
 
+    String peekClosingTag() {
+        try {
+            StringBuilder tag = new StringBuilder();
+            int c = '<';
+            int i = 4; // Skip </
+            while(c != '>') {
+                reader.mark(i);
+                reader.skip(i / 2);
+                for (int j = i / 2; j < i; j++) {
+                    c = reader.read();
+                    if(c == -1) {
+                        reader.reset();
+                        throw new XMLParseException("Reached end of file during parsing", this);
+                    }
+                    if(c == '>') break;
+                    else tag.append((char) c);
+                }
+                reader.reset();
+                i *= 2;
+            }
+            return tag.toString();
+        } catch(IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     /**
      * Determines whether the reader starts with the given string.
      *
@@ -361,6 +411,23 @@ class XMLReader implements AutoCloseable {
      */
     boolean startsWith(char c) {
         return !isEmpty() && peek() == c;
+    }
+
+    boolean startsWithIgnoreCase(String string) {
+        try {
+            reader.mark(string.length());
+            for(int i=0; i<string.length(); i++) {
+                int c = reader.read();
+                if(c == -1 || Character.toLowerCase((char)c) != Character.toLowerCase(string.charAt(i))) {
+                    reader.reset();
+                    return false;
+                }
+            }
+            reader.reset();
+            return true;
+        } catch(IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /**

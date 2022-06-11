@@ -1,15 +1,16 @@
 package com.github.rccookie.xml;
 
 import java.util.Collections;
-import java.util.Objects;
+
+import com.github.rccookie.util.Arguments;
 
 public class Text extends Node {
 
     private String text;
 
     public Text(String text) {
-        super("text", Collections.emptyMap(), Collections.emptyList());
-        this.text = Objects.requireNonNull(text);
+        super("text", AttributeMap.EMPTY, Collections.emptyList());
+        this.text = Arguments.checkNull(text);
     }
 
 
@@ -19,18 +20,21 @@ public class Text extends Node {
     }
 
     public void setText(String text) {
-        this.text = Objects.requireNonNull(text);
+        this.text = Arguments.checkNull(text);
     }
 
     @Override
-    void toString(StringBuilder str, boolean inner) {
-        for(int i=0, stop=text.length(); i<stop; i++) {
-            char c = text.charAt(i);
-            if(c == '<') str.append("&lt;");
-            else if(c == '>') str.append("&gt;");
-            else if(c == '&') str.append("&amp;");
-            else str.append(c);
-        }
+    public String getText() {
+        return text;
+    }
+
+    @Override
+    void toString(StringBuilder str, int indent, boolean html, boolean inner) {
+        boolean parentCode = parent != null && parent.tag.equals("code");
+        String text = html && !parentCode ? this.text.replaceAll("\\s+", " ") : this.text;
+        if(parent != null && parent.tag.equals("script")) str.append(text.replace("</script>", "</script\\>"));
+        else if(!parentCode && indent >= 0) str.append(XMLEncoder.encode(text).replace("\n", '\n' + "  ".repeat(indent)));
+        else XMLEncoder.encode(text, str);
     }
 
     @Override
@@ -43,17 +47,12 @@ public class Text extends Node {
     }
 
     @Override
-    void innerXML(StringBuilder str, boolean inner) {
-        toString(str, inner);
+    void innerXML(StringBuilder str, int indent, boolean html, boolean inner) {
+        toString(str, indent, html, inner);
     }
 
     @Override
     public void setInnerXML(String xml) {
-        setText(xml
-                .replace("&lt;", "<")
-                .replace("&gt;", ">")
-                .replace("&amp;", "&")
-                .replace("&apos;", "'")
-                .replace("&quot;", "\""));
+        setText(XMLEncoder.decode(xml));
     }
 }
