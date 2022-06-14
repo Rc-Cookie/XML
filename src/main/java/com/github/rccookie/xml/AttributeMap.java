@@ -6,10 +6,25 @@ import java.util.Map;
 import java.util.Set;
 
 import com.github.rccookie.util.Arguments;
+import com.github.rccookie.util.Cloneable;
 
-public class AttributeMap implements Map<String,String> {
+import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NotNull;
 
-    public static final AttributeMap EMPTY = new AttributeMap() {
+/**
+ * A map that does not allow null keys and values.
+ */
+public class AttributeMap implements Map<String,String>, Cloneable<AttributeMap> {
+
+    /**
+     * Singleton empty map.
+     */
+    static final AttributeMap EMPTY = new AttributeMap() {
+        @Override
+        public @NotNull AttributeMap clone() {
+            return this;
+        }
+
         @Override
         public int size() {
             return 0;
@@ -89,7 +104,17 @@ public class AttributeMap implements Map<String,String> {
         }
     };
 
+    /**
+     * The map backing this attribute map.
+     */
     private final Map<String,String> map = new LinkedHashMap<>();
+
+    /**
+     * Creates a new attribute map.
+     */
+    // package-private
+    AttributeMap() {
+    }
 
     @Override
     public int size() {
@@ -171,6 +196,12 @@ public class AttributeMap implements Map<String,String> {
         return str.toString();
     }
 
+    /**
+     * Appends these attributes to the given StringBuilder. A leading space
+     * will also be included.
+     *
+     * @param out The string builder to write into
+     */
     void toString(StringBuilder out) {
         forEach((k,v) -> {
             out.append(' ');
@@ -181,7 +212,26 @@ public class AttributeMap implements Map<String,String> {
         });
     }
 
+    /**
+     * Checks that the given string is not null.
+     *
+     * @param notNull The string to check
+     * @return The input string
+     */
+    @Contract("null->fail;_->param1")
     private static String check(String notNull) {
         return Arguments.checkNull(notNull, "No null keys and values allowed");
+    }
+
+    /**
+     * Creates a copy of this attribute map.
+     *
+     * @return A copy of this map
+     */
+    @Override
+    public @NotNull AttributeMap clone() {
+        AttributeMap copy = new AttributeMap();
+        copy.map.putAll(map);
+        return copy;
     }
 }

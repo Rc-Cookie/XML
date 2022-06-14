@@ -1,39 +1,68 @@
 package com.github.rccookie.xml;
 
 import java.util.Collections;
+import java.util.Objects;
 
 import com.github.rccookie.util.Arguments;
 
+import org.jetbrains.annotations.NotNull;
+
+/**
+ * Represents a text block inside an xml tree.
+ */
 public class Text extends Node {
 
+    /**
+     * The text.
+     */
+    @NotNull
     private String text;
 
-    public Text(String text) {
+    /**
+     * Creates a new text node with the given text content.
+     *
+     * @param text The text content
+     */
+    public Text(@NotNull String text) {
         super("text", AttributeMap.EMPTY, Collections.emptyList());
         this.text = Arguments.checkNull(text);
     }
 
-
     @Override
-    void getText(StringBuilder str) {
-        str.append(text);
+    public boolean equals(Object o) {
+        return o instanceof Text && ((Text) o).text.equals(text);
     }
 
-    public void setText(String text) {
+    @Override
+    public int hashCode() {
+        return Objects.hash(text);
+    }
+
+    /**
+     * Sets the text content of this text node.
+     *
+     * @param text The text to set
+     */
+    public void setText(@NotNull String text) {
         this.text = Arguments.checkNull(text);
     }
 
+    /**
+     * Returns this node's text.
+     *
+     * @return The text
+     */
     @Override
-    public String getText() {
+    public @NotNull String text() {
         return text;
     }
 
     @Override
-    void toString(StringBuilder str, int indent, boolean html, boolean inner) {
-        boolean parentCode = parent != null && parent.tag.equals("code");
-        String text = html && !parentCode ? this.text.replaceAll("\\s+", " ") : this.text;
+    void toString(StringBuilder str, FormattingOptions options) {
+        boolean parentCode = options.html && parent != null && parent.tag.equals("code");
+//        String text = html && !parentCode ? this.text.replaceAll("\\s+", " ") : this.text;
         if(parent != null && parent.tag.equals("script")) str.append(text.replace("</script>", "</script\\>"));
-        else if(!parentCode && indent >= 0) str.append(XMLEncoder.encode(text).replace("\n", '\n' + "  ".repeat(indent)));
+        else if(!parentCode && options.formatted) str.append(XMLEncoder.encode(text).replace("\n", '\n' + "  ".repeat(options.indent)));
         else XMLEncoder.encode(text, str);
     }
 
@@ -47,12 +76,12 @@ public class Text extends Node {
     }
 
     @Override
-    void innerXML(StringBuilder str, int indent, boolean html, boolean inner) {
-        toString(str, indent, html, inner);
+    void innerXML(StringBuilder str, FormattingOptions options) {
+        toString(str, options);
     }
 
     @Override
-    public void setInnerXML(String xml) {
+    public void setInnerXML(@NotNull String xml, long options) {
         setText(XMLEncoder.decode(xml));
     }
 }

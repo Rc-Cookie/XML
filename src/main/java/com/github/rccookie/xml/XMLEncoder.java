@@ -6,15 +6,29 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Predicate;
 
+/**
+ * Utility class for encoding and decoding strings in an xml document.
+ */
 public final class XMLEncoder {
 
     private XMLEncoder() {
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * Default predicate to decide whether a character is displayable: Character
+     * is in ASCII charset.
+     */
     private static final Predicate<Character> DEFAULT_XML_DISPLAYABLE = c -> c < 128;
+    /**
+     * Maps the name of a named escape sequence to the character it represents.
+     */
     private static final Map<String, Character> DECODE_LOOKUP;
+    /**
+     * Maps a character to the name of its named escape sequence, if it exists.
+     */
     private static final Map<Character, String> ENCODE_LOOKUP;
+    // Initialize lookups
     static {
         Map<String,Character> decodeLookup = new HashMap<>(359);
         decodeLookup.put("Tab", (char) 9);
@@ -383,6 +397,14 @@ public final class XMLEncoder {
         ENCODE_LOOKUP = Collections.unmodifiableMap(encodeLookup);
     }
 
+    /**
+     * Finds and replaces all valid escape sequences with their respective character
+     * and returns the decoded string. Named, decimal and hexadecimal escape sequences
+     * are supported.
+     *
+     * @param str The string to decode
+     * @return The decoded string
+     */
     public static String decode(String str) {
         StringBuilder out = new StringBuilder(str.length());
         char c;
@@ -417,24 +439,60 @@ public final class XMLEncoder {
         return out.toString();
     }
 
+    /**
+     * Encodes the given string to a valid xml string for ASCII charset.
+     *
+     * @param str The string to encode
+     * @return The encoded string
+     */
     public static String encode(String str) {
         return encode(str, (Charset) null);
     }
 
+    /**
+     * Encodes the given string to a valid xml string for the given charset.
+     *
+     * @param str The string to encode
+     * @param charset The charset that defines what characters are displayable
+     * @return The encoded string
+     */
     public static String encode(String str, Charset charset) {
         StringBuilder out = new StringBuilder();
         encode(str, out, charset);
         return out.toString();
     }
 
+    /**
+     * Encodes the given string to a valid xml string for ASCII charset and
+     * writes the output into the given StringBuilder.
+     *
+     * @param str The string to encode
+     * @param out The string builder to write into
+     */
     public static void encode(String str, StringBuilder out) {
         encode(str, out, (Charset) null);
     }
 
+    /**
+     * Encodes the given string to a valid xml string for the given charset
+     * and writes the output into the given StringBuilder.
+     *
+     * @param str The string to encode
+     * @param out The string builder to write into
+     * @param charset The charset that defines what characters are displayable
+     */
     public static void encode(String str, StringBuilder out, Charset charset) {
         encode(str, out, charset != null ? charset.newEncoder()::canEncode : DEFAULT_XML_DISPLAYABLE);
     }
 
+    /**
+     * Encodes the given string to a valid xml string for the given display
+     * predicate and writes the output into the given StringBuilder.
+     *
+     * @param str The string to encode
+     * @param out The string builder to write into
+     * @param displayable The predicate that defines what characters are displayable
+     */
     private static void encode(String str, StringBuilder out, Predicate<Character> displayable) {
         for(int i=0; i<str.length(); i++) {
             char c = str.charAt(i);

@@ -18,7 +18,8 @@ class XMLReader implements AutoCloseable {
     /**
      * Current position in the string.
      */
-    private int line = 1, charIndex = 1;
+    int line = 1;
+    int charIndex = 1;
 
     final boolean includeComments;
     final boolean trimWhitespaces;
@@ -38,9 +39,9 @@ class XMLReader implements AutoCloseable {
         includeComments = (options & XML.INCLUDE_COMMENTS) != 0;
         trimWhitespaces = (options & XML.PRESERVE_WHITESPACES) == 0;
         includeProcessors = (options & XML.INCLUDE_PROCESSORS) != 0;
-        allowEmptyAttr = (options & XML.ALLOW_EMPTY_ATTR) != 0;
         tryFixErrors = (options & XML.TRY_FIX_ERRORS) != 0;
-        html = (options & XML.HTML) != 0;
+        allowEmptyAttr = (options & XML.ALLOW_EMPTY_ATTR) != 0;
+        html = (options & XML.HTML_OPTION) != 0;
     }
 
 
@@ -145,7 +146,7 @@ class XMLReader implements AutoCloseable {
     /**
      * Skips all whitespaces at the start of the reader as specified in
      * {@link Character#isWhitespace(char)}. If the {@link XML#PRESERVE_WHITESPACES}
-     * option is enabled this does nothing.
+     * option and not <code>force</code> is enabled this does nothing.
      *
      * @return This xml reader
      */
@@ -165,6 +166,11 @@ class XMLReader implements AutoCloseable {
         }
     }
 
+    /**
+     * Skips the next character asserting it is a whitespace.
+     *
+     * @return This xml reader
+     */
     XMLReader skipWhitespace() {
         char c = read();
         if(!Character.isWhitespace(c))
@@ -172,6 +178,12 @@ class XMLReader implements AutoCloseable {
         return this;
     }
 
+    /**
+     * Returns the next non-whitespace character asserting there is one,
+     * without consuming the reader.
+     *
+     * @return The next non-whitespace character
+     */
     char peekNextNonWhitespace() {
         try {
             int c = peek();
@@ -355,6 +367,12 @@ class XMLReader implements AutoCloseable {
         }
     }
 
+    /**
+     * Returns the tag name of the closing tag at the current start of
+     * the reader, asserting there is one. The reader does not get consumed.
+     *
+     * @return The name of the next closing tag
+     */
     String peekClosingTag() {
         try {
             StringBuilder tag = new StringBuilder();
@@ -413,6 +431,14 @@ class XMLReader implements AutoCloseable {
         return !isEmpty() && peek() == c;
     }
 
+    /**
+     * Determines whether the reader starts with the given characters,
+     * ignoring their case.
+     *
+     * @param string The string to check for
+     * @return Whether the reader starts with those characters, ignoring
+     *         their case
+     */
     boolean startsWithIgnoreCase(String string) {
         try {
             reader.mark(string.length());

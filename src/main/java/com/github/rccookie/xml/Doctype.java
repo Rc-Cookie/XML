@@ -1,23 +1,63 @@
 package com.github.rccookie.xml;
 
 import java.util.Collections;
+import java.util.Objects;
 
 import com.github.rccookie.util.Arguments;
 
+import org.jetbrains.annotations.NotNull;
+
+/**
+ * A doctype node.
+ */
 public class Doctype extends Node {
 
+    /**
+     * The root element attribute.
+     */
+    @NotNull
     private String rootElement;
     private LocationType locationType = null;
     private String name = null;
     private String location = null;
     private String structure = null;
 
+    /**
+     * Creates a new doctype node.
+     *
+     * @param rootElement The root element attribute value
+     */
     public Doctype(String rootElement) {
         super("!DOCTYPE", AttributeMap.EMPTY, Collections.emptyList());
         this.rootElement = Arguments.checkNull(rootElement);
     }
 
-    public String getRootElement() {
+    @Override
+    public @NotNull Doctype clone() {
+        Doctype copy = new Doctype(rootElement);
+        copy.locationType = locationType;
+        copy.name = name;
+        copy.location = location;
+        copy.structure = structure;
+        return copy;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if(this == o) return true;
+        if(!(o instanceof Doctype)) return false;
+        Doctype doctype = (Doctype) o;
+        return rootElement.equals(doctype.rootElement) && locationType == doctype.locationType
+                && Objects.equals(name, doctype.name) && Objects.equals(location, doctype.location)
+                && Objects.equals(structure, doctype.structure);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(rootElement, locationType, name, location, structure);
+    }
+
+    public @NotNull String getRootElement() {
         return rootElement;
     }
 
@@ -37,7 +77,7 @@ public class Doctype extends Node {
         return structure;
     }
 
-    public void setRootElement(String rootElement) {
+    public void setRootElement(@NotNull String rootElement) {
         this.rootElement = Arguments.checkNull(rootElement);
     }
 
@@ -58,7 +98,7 @@ public class Doctype extends Node {
     }
 
     @Override
-    void toString(StringBuilder str, int indent, boolean html, boolean inner) {
+    void toString(StringBuilder str, FormattingOptions options) {
         str.append("<!DOCTYPE ").append(rootElement);
         if(locationType != null) {
             str.append(' ').append(locationType);
@@ -70,11 +110,6 @@ public class Doctype extends Node {
         else if(structure != null)
             str.append(' ').append(structure);
         str.append('>');
-    }
-
-    @Override
-    public void setInnerXML(String xml) {
-        super.setInnerXML(xml);
     }
 
     public enum LocationType {

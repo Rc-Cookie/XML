@@ -3,16 +3,36 @@ package com.github.rccookie.xml;
 import java.io.Reader;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.Iterator;
 import java.util.Set;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import com.github.rccookie.util.Arguments;
+import com.github.rccookie.util.Console;
+import com.github.rccookie.util.IterableIterator;
 
-public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable {
+import org.jetbrains.annotations.NotNull;
 
+/**
+ * A parser for an xml formatted input. The parsing works single-pass and
+ * can efficiently use stream input.
+ */
+public class XMLParser implements IterableIterator<Node>, AutoCloseable {
+
+    /**
+     * Html void tags (tags that must not be closed).
+     */
     static final Set<String> HTML_VOID_TAGS = Set.of("area", "base", "br", "col", "hr", "img", "input", "link", "meta", "param", "command", "keygen", "source");
+    /**
+     * Html tags that don't have to be closed.
+     */
     static final Set<String> HTML_POSSIBLY_UNCLOSED_TAGS = Set.of("html", "head", "body", "p", "li", "dt", "dd", "option", "thead", "th", "tbody", "tr", "td", "tfoot", "colgroup");
+    /**
+     * List of valid html tags.
+     */
     static final Set<String> HTML_TAGS = Set.of("a", "abbr", "acronym", "address", "applet", "area", "article", "aside", "audio", "b", "base", "basefont", "bb", "bdo", "big",
             "blockquote", "body", "br", "button", "canvas", "caption", "center", "circle", "cite", "code", "col", "colgroup", "command", "datagrid", "datalist", "dd", "del",
             "details", "dfn", "dialog", "dir", "div", "dl", "dt", "em", "embed", "eventsource", "fieldset", "figcaption", "figure", "font", "footer", "form", "frame", "frameset",
@@ -21,69 +41,131 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
             "progress", "q", "rp", "rt", "ruby", "s", "samp", "script", "section", "select", "small", "source", "span", "strike", "strong", "style", "sub", "summary", "sup", "svg",
             "table", "tbody", "td", "template", "textarea", "tfoot", "th", "thead", "time", "title", "tr", "track", "tt", "u", "ul", "var", "video", "wbr");
 
+
+    /**
+     * The xml reader over the input source.
+     */
     private final XMLReader xml;
+    /**
+     * Whether the parser has been closed.
+     */
     private boolean closed = false;
+    /**
+     * Whether no node has been parsed, the next node will be the first one.
+     */
     private boolean firstNode = true;
+    /**
+     * Whether the doctype declaration is still allowed.
+     */
     private boolean doctypeAllowed = true;
 
+    /**
+     * Current tag hierarchy, as stack from root to current leaf.
+     */
     private final Deque<String> hierarchy = new ArrayDeque<>();
 
+    /**
+     * The warning message listener.
+     */
     private Consumer<String> warningListener = w -> {};
 
 
+    /**
+     * Creates a new xml parser.
+     *
+     * @param reader The input source
+     * @param options Parsing options
+     */
     XMLParser(Reader reader, long options) {
         xml = new XMLReader(reader, options);
     }
 
+    /**
+     * Sets the consumer that gets invoked when an error gets fixed.
+     * Will only be used if the {@link XML#TRY_FIX_ERRORS} flag is set.
+     *
+     * @param warningListener The listener to set
+     * @return This parser
+     */
     public XMLParser setWarningListener(Consumer<String> warningListener) {
         this.warningListener = Arguments.checkNull(warningListener);
-
         return this;
     }
 
+    /**
+     * Closes this parser and the underlying input source.
+     */
     @Override
     public void close() {
+        if(closed) return;
         closed = true;
         xml.close();
     }
 
-    @Override
-    public Iterator<Node> iterator() {
-        return this;
-    }
 
+    /**
+     * Parses the complete input source into a document and closes the parser.
+     * This has to be the first parsing action on the parser.
+     *
+     * @return The parsed document
+     */
     public Document parseAll() {
         if(closed) throw new IllegalStateException("Parser has been closed");
         if(!firstNode) throw new IllegalStateException("Can only parse document as the first parse action");
         Document document = new Document();
-        hierarchy.clear();
         while(hasNext()) {
-            Node next = parseNextNode();
+            Node next = next(); // use 'next' for synchronization
             if(next instanceof XMLDeclaration)
                 document.setXMLDeclaration((XMLDeclaration) next);
             else if(next instanceof Doctype)
                 document.setDoctype((Doctype) next);
             else document.children.add(next);
         }
+        try {
+            close(); // Don't throw away the parsed document...
+        } catch(Exception e) {
+            Console.warn("Error while closing parser:");
+            Console.warn(e);
+        }
         return document;
     }
 
+    /**
+     * Returns whether the parser has more data to parse. This <b>does not</b> necessarily
+     * mean that the remaining input will be parsable, it may still be invalid.
+     *
+     * @return Whether more data to parse is found
+     */
     @Override
     public boolean hasNext() {
         return !closed && !xml.skipToContent().isEmpty(); // Check if only remaining is an empty text
     }
 
+    /**
+     * Parses the next node in the input source.
+     *
+     * @return The parsed node
+     */
     @Override
-    public Node next() {
+    public synchronized Node next() {
         if(closed) throw new IllegalStateException("Parser has been closed");
         if(!hasNext()) throw new XMLParseException("No value present", xml);
         hierarchy.clear();
         return parseNextNode();
     }
 
+    /**
+     * Returns a stream over the nodes parsable from the input source.
+     *
+     * @return A stream over parsed nodes
+     */
+    @NotNull
+    public Stream<Node> stream() {
+        return StreamSupport.stream(Spliterators.spliteratorUnknownSize(this, Spliterator.IMMUTABLE|Spliterator.NONNULL), false);
+    }
+
     private Node parseNextNode() {
         if(!xml.startsWith('<')) {
-//            System.out.println("Start: " + xml.peekDescription());
             Text text = parseNextText();
             if(text != null) return text;
             return parseNextNode();
@@ -301,8 +383,11 @@ public class XMLParser implements Iterator<Node>, Iterable<Node>, AutoCloseable 
 
             String key = parseNextKey("attribute key");
             c = xml.peekNextNonWhitespace();
-            if(xml.allowEmptyAttr && c != '=')
+            if((xml.tryFixErrors || xml.allowEmptyAttr) && c != '=') {
+                if(!xml.allowEmptyAttr)
+                    warn("Attribute without value");
                 node.attributes.put(key, "");
+            }
             else {
                 xml.skipWhitespaces(true).skipExpected('=').skipWhitespaces(true);
                 node.attributes.put(key, parseNextString());
