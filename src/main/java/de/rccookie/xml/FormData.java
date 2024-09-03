@@ -447,13 +447,18 @@ public class FormData implements List<FormData.Entry> {
                 value = n.attributes.getOrDefault("value", "");
             }
             else if(n.tag.equalsIgnoreCase("select")) {
-                List<Node> options = n.getElementsByTag("option").useAsList();
+                List<Node> options = n.getElementsByTag("option").toList();
                 if(options.isEmpty())
                     continue;
-                Node selected = options.stream().filter(o -> o.attributes.containsKey("selected"))
-                        .findFirst()
-                        .orElse(options.get(0));
-                value = selected.attributes.getOrDefault("value", "");
+                List<Node> selected = options.stream().filter(o -> o.attributes.containsKey("selected")).collect(Collectors.toList());
+                if(n.attributes.containsKey("multiple")) {
+                    String name = n.attribute("name");
+                    for(Node s : selected)
+                        data.add(name, s.attributes.getOrDefault("value", ""));
+                    continue;
+                }
+                Node onlySelected = selected.isEmpty() ? options.get(0) : selected.get(selected.size() - 1);
+                value = onlySelected.attributes.getOrDefault("value", "");
             }
             else {
                 value = n.innerHTML().trim();
